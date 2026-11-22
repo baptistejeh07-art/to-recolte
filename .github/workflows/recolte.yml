@@ -1,0 +1,43 @@
+name: recolte
+on:
+  workflow_dispatch:
+    inputs:
+      liste:
+        description: "fichier de liste (identifiants arXiv, JSON)"
+        required: true
+        default: "listes/pilote.json"
+permissions:
+  contents: read
+jobs:
+  recolte:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - name: outils
+        run: |
+          gpg --version | head -1
+          python3 --version
+          sha1sum tir_delocalise_2026-11-22.py
+      - name: temoin (0 reseau externe)
+        run: python3 -X utf8 tir_delocalise_2026-11-22.py --temoin
+      - name: recolte
+        id: recolte
+        env:
+          RECOLTE_PHRASE: ${{ secrets.RECOLTE_PHRASE }}
+          LISTE: ${{ inputs.liste }}
+        run: python3 tir_delocalise_2026-11-22.py --recolter "$LISTE" artefact
+      - name: garde D1
+        id: d1
+        if: always()
+        run: |
+          ls -l artefact
+          test "$(ls artefact | sort | tr '\n' ' ')" = "comptes.json paquet.tar.gpg "
+          file artefact/paquet.tar.gpg | grep -i -E "encrypted|PGP|GPG"
+          python3 -c "import json;c=json.load(open('artefact/comptes.json'));print(c['statuts'],c['arret'],c['duree_s'])"
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.d1.outcome == 'success'
+        with:
+          name: recolte
+          path: artefact
+          retention-days: 7
